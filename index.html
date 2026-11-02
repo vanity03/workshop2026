@@ -34,6 +34,11 @@ button:hover{border-color:var(--b)}
 .msg.blue{align-self:flex-start;border-left:3px solid var(--b);color:var(--t)}
 .msg.red{align-self:flex-end;border-right:3px solid var(--r);color:var(--t)}
 .opts{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.att{margin-top:6px;background:#0f1420;border:1px dashed #44507a;border-radius:8px;padding:8px 10px;font-size:.85rem}
+.att pre{margin:6px 0 2px;font:12px/1.4 ui-monospace,Consolas,monospace;white-space:pre-wrap;color:#b8c4dc}
+.att small{color:var(--m)}
+.turn{padding:10px 14px;border-radius:10px;margin-bottom:10px;font-weight:600}
+.turn.my{background:#1f3a2e;color:var(--g)}.turn.wait{background:var(--c2);color:var(--m)}
 .rep .it{padding:8px 10px;border-radius:8px;background:var(--c2);margin:6px 0;border-left:4px solid var(--m)}
 .rep .it.g{border-color:var(--g)}.rep .it.b{border-color:var(--r)}
 .rep small{color:var(--m)}
@@ -75,6 +80,7 @@ button:hover{border-color:var(--b)}
         <div class="secret" id="secret"></div>
       </div>
       <div class="card">
+        <div class="turn" id="turn"></div>
         <div class="chat" id="chat"></div>
         <div class="opts" id="opts"></div>
       </div>
@@ -116,11 +122,13 @@ function render() {
     $('chk').innerHTML = st.ch.map(c => `<li class="${c[1] ? 'ok' : ''}">${esc(c[0])}</li>`).join('');
     $('secret').innerHTML = '<b>Len pre váš tím:</b><br>' + esc(st.secret);
     const ch = $('chat');
-    ch.innerHTML = st.log.length
-      ? st.log.map(m => `<div class="msg ${m.r}"><small>${m.r === 'blue' ? 'Blue Team' : 'Útočníci'}</small>${esc(m.txt)}</div>`).join('')
-      : '<p style="color:var(--m)">Zatiaľ ticho. Pošlite prvú správu alebo počkajte na protistranu. Radťe sa v tíme.</p>';
+    const att = a => a ? `<div class="att">📎 <b>${esc(a.n)}</b> <small>${esc(a.sz)}</small><pre>${esc(a.l.join('\n'))}</pre><small>Simulácia: vymyslené dáta</small></div>` : '';
+    ch.innerHTML = st.log.map(m => `<div class="msg ${m.r}"><small>${m.r === 'blue' ? 'Blue Team' : 'Útočníci'}</small>${esc(m.txt)}${att(m.att)}</div>`).join('');
     ch.scrollTop = ch.scrollHeight;
-    $('opts').innerHTML = st.hand.map(o => `<button onclick="pick(${o.id})">${esc(o.txt)}</button>`).join('');
+    const my = st.turn === role;
+    $('turn').className = 'turn ' + (my ? 'my' : 'wait');
+    $('turn').textContent = my ? 'Ste na rade. Vyberte odpoveď na poslednú správu a poraďte sa v tíme.' : 'Čakáte na odpoveď protistrany…';
+    $('opts').innerHTML = my ? st.hand.map(o => `<button onclick="pick(${o.id})">${esc(o.txt)}</button>`).join('') : '';
   }
   if (st.end) renderReport();
 }
