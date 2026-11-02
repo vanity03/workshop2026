@@ -10,16 +10,20 @@ reset();
 
 const good = o => (o.e === 'ok' ? G.price <= S.bmax : o.e === 'racc' ? G.offer >= S.min : o.e === 'pay' ? 0 : o.g);
 const hash = o => (o.id * 9301 + G.n * 49297 + 7) % 233280;
-const free = o => o.rep || !G.used[o.id];
-const cond = o => (!o.need || G.f[o.need]) && (!o.not || !G.f[o.not]) && (o.o === undefined || (o.o > G.offer && o.o < G.price)) && (o.np === undefined || (o.np < G.price && G.price > (o.pa || 0)));
+const free = o => !G.used[o.id];
+const cond = o => (!o.need || G.f[o.need]) && (!o.not || !G.f[o.not]) && (!o.ifx || o.ifx(G)) && (o.o === undefined || (o.o > G.offer && o.o < G.price)) && (o.np === undefined || (o.np < G.price && G.price > (o.pa || 0)));
 
 function hand(r) {
   if (!G.on || G.end || r !== G.turn) return [];
-  const base = O.filter(o => o.s === r && o.p.includes(G.ph) && free(o) && cond(o));
-  const L = base.filter(o => o.to.includes(G.last.c)).sort((a, b) => hash(a) - hash(b));
+  const ok = o => o.s === r && o.p.includes(G.ph) && cond(o);
+  const uniq = l => l.filter((o, i) => l.findIndex(x => x.txt === o.txt) === i);
+  const base = O.filter(o => ok(o) && free(o));
+  const L = uniq(base.filter(o => o.to.includes(G.last.c)).sort((a, b) => hash(a) - hash(b)));
   const gs = L.filter(good), bs = L.filter(o => !good(o));
   let h = gs.length >= 2 && bs.length ? [gs[0], gs[1], bs[0]] : gs.length >= 2 ? gs.slice(0, 3) : gs.length === 1 ? [gs[0], ...bs.slice(0, 2)] : bs.slice(0, 3);
-  if (h.length < 3) h = h.concat(base.filter(o => o.to.includes('*') && !h.includes(o))).slice(0, 3);
+  const add = l => uniq(l).forEach(o => { if (h.length < 3 && !h.some(x => x.txt === o.txt)) h.push(o); });
+  if (h.length < 3) add(base.filter(o => o.to.includes('*')).sort((a, b) => hash(a) - hash(b)));
+  if (h.length < 1) add(O.filter(o => ok(o) && (o.to.includes(G.last.c) || o.to.includes('*'))).sort((a, b) => hash(a) - hash(b)));
   return h.sort((a, b) => hash(b) - hash(a));
 }
 const finish = why => { G.end = why; clearTimeout(tm); };
