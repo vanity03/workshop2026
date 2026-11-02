@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ransomvér: vyjednávanie</title>
+<style>
+:root{--bg:#0f1420;--c:#1a2233;--c2:#232d44;--t:#e6ebf5;--m:#8b97ad;--b:#4da3ff;--r:#ff5d6c;--g:#3ddc97;--y:#ffc857}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--t);font:16px/1.45 system-ui,sans-serif}
+[hidden]{display:none!important}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+h1{font-size:1.5rem;margin:.2em 0}
+.card{background:var(--c);border-radius:12px;padding:16px}
+button{font:inherit;color:var(--t);background:var(--c2);border:1px solid #33405e;border-radius:10px;padding:12px 14px;cursor:pointer;text-align:left}
+button:hover{border-color:var(--b)}
+.big{font-size:1.2rem;padding:20px;text-align:center;flex:1}
+.blue{color:var(--b)}.red{color:var(--r)}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.top{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.stat{background:var(--c);border-radius:10px;padding:8px 14px;min-width:120px}
+.stat small{display:block;color:var(--m);font-size:.75rem}
+.stat b{font-size:1.2rem}
+.grid{display:grid;grid-template-columns:270px 1fr;gap:12px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.chk{list-style:none;padding:0;margin:8px 0}
+.chk li{padding:6px 0 6px 28px;position:relative;color:var(--m)}
+.chk li:before{content:"○";position:absolute;left:4px}
+.chk li.ok{color:var(--g)}.chk li.ok:before{content:"✔"}
+.secret{background:#2b2440;border-left:3px solid var(--y);padding:8px 10px;border-radius:6px;font-size:.9rem}
+.chat{height:340px;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:4px}
+.msg{max-width:80%;padding:8px 12px;border-radius:12px;background:var(--c2)}
+.msg small{display:block;font-size:.7rem;color:var(--m)}
+.msg.blue{align-self:flex-start;border-left:3px solid var(--b);color:var(--t)}
+.msg.red{align-self:flex-end;border-right:3px solid var(--r);color:var(--t)}
+.opts{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.rep .it{padding:8px 10px;border-radius:8px;background:var(--c2);margin:6px 0;border-left:4px solid var(--m)}
+.rep .it.g{border-color:var(--g)}.rep .it.b{border-color:var(--r)}
+.rep small{color:var(--m)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Ransomvér: vyjednávanie</h1>
+
+  <div id="lobby" class="card">
+    <p id="intro">Vysoká škola: útočníci zašifrovali servery a vyhrážajú sa únikom dát.</p>
+    <p>Jeden tím = jedno zariadenie. Vyberte si stranu:</p>
+    <div class="row">
+      <button class="big blue" onclick="join('blue')">🛡️ Blue Team<br><small>Obrancovia školy</small></button>
+      <button class="big red" onclick="join('red')">☠️ Ransomvér útočníci</button>
+    </div>
+  </div>
+
+  <div id="game" hidden>
+    <div class="top">
+      <div class="stat"><small>Vaša strana</small><b id="who"></b></div>
+      <div class="stat"><small>Zostávajúci čas</small><b id="time">20:00</b></div>
+      <div class="stat"><small>Fáza</small><b id="ph"></b></div>
+      <div class="stat"><small>Požadovaná cena</small><b id="price"></b></div>
+      <div class="stat"><small>Ponuka Blue Teamu</small><b id="offer"></b></div>
+      <div class="stat"><small>Deadline</small><b id="hrs"></b></div>
+    </div>
+
+    <div id="startbox" class="card" hidden>
+      <p id="intro2"></p>
+      <p>Začnite, až keď sú pripojené obe strany (obe zariadenia). Hra trvá 20 minút.</p>
+      <button class="big" onclick="post('/start')">▶ Spustiť hru</button>
+    </div>
+
+    <div id="play" class="grid" hidden>
+      <div class="card">
+        <b>Ciele tímu</b>
+        <ul class="chk" id="chk"></ul>
+        <div class="secret" id="secret"></div>
+      </div>
+      <div class="card">
+        <div class="chat" id="chat"></div>
+        <div class="opts" id="opts"></div>
+      </div>
+    </div>
+
+    <div id="report" class="card rep" hidden></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const PH = ['', '1. Proof-of-life', '2. Bargaining', '3. Support'];
+const usd = n => n ? n.toLocaleString('en') + ' USD' : '-';
+let role, st, at = 0, es;
+
+function join(r) {
+  role = r;
+  $('lobby').hidden = true; $('game').hidden = false;
+  $('who').innerHTML = r === 'blue' ? '<span class="blue">Blue Team</span>' : '<span class="red">Útočníci</span>';
+  es = new EventSource('/events?role=' + r);
+  es.onmessage = e => { st = JSON.parse(e.data); at = Date.now(); render(); };
+}
+function post(url, body) {
+  return fetch(url, { method: 'POST', body: JSON.stringify(body || {}) });
+}
+function pick(id) { post('/pick', { role, id }); }
+
+function render() {
+  $('intro2').textContent = st.intro;
+  $('ph').textContent = PH[st.ph];
+  $('price').textContent = usd(st.price);
+  $('offer').textContent = usd(st.offer);
+  $('hrs').textContent = st.hrs + ' h';
+  $('startbox').hidden = !!st.on;
+  $('play').hidden = !st.on || !!st.end;
+  $('report').hidden = !st.end;
+  if (st.on && !st.end) {
+    $('chk').innerHTML = st.ch.map(c => `<li class="${c[1] ? 'ok' : ''}">${esc(c[0])}</li>`).join('');
+    $('secret').innerHTML = '<b>Len pre váš tím:</b><br>' + esc(st.secret);
+    const ch = $('chat');
+    ch.innerHTML = st.log.length
+      ? st.log.map(m => `<div class="msg ${m.r}"><small>${m.r === 'blue' ? 'Blue Team' : 'Útočníci'}</small>${esc(m.txt)}</div>`).join('')
+      : '<p style="color:var(--m)">Zatiaľ ticho. Pošlite prvú správu alebo počkajte na protistranu. Radťe sa v tíme.</p>';
+    ch.scrollTop = ch.scrollHeight;
+    $('opts').innerHTML = st.hand.map(o => `<button onclick="pick(${o.id})">${esc(o.txt)}</button>`).join('');
+  }
+  if (st.end) renderReport();
+}
+
+function renderReport() {
+  const mine = st.end.rep.filter(l => l.r === role);
+  const ok = mine.filter(l => l.g).length;
+  const tactics = new Set(mine.filter(l => l.g).map(l => l.tn)).size;
+  const done = st.ch.filter(c => c[1]).length;
+  $('report').innerHTML = `
+    <h2>Záverečný report</h2>
+    <p><b>${esc(st.end.txt)}</b></p>
+    <p>Dohodnutá suma: <b>${usd(st.deal)}</b> (požiadavka na konci: ${usd(st.price)})<br>
+    Splnené ciele: <b>${done}/${st.ch.length}</b> · Dobré správy: <b>${ok}/${mine.length}</b> · Rôzne dobré taktiky: <b>${tactics}</b></p>
+    <h3>Vaše správy a ich taktiky</h3>
+    ${mine.map(l => `<div class="it ${l.g ? 'g' : 'b'}">
+      ${l.g ? '✔' : '✘'} <b>${esc(l.tn)}</b>: ${esc(l.txt)}<br>
+      <small>${esc(l.g ? l.ls : l.w + ' ' + l.ls)}</small></div>`).join('') || '<p>Neodoslali ste žiadnu správu.</p>'}
+    <h3>Správy protistrany</h3>
+    ${st.end.rep.filter(l => l.r !== role).map(l => `<div class="it"><b>${esc(l.tn)}</b>: ${esc(l.txt)}</div>`).join('') || '<p>Žiadne.</p>'}
+    <p><b>Otázky na diskusiu:</b> Ktorú taktiku ste si všimli u protistrany? Kedy ste sa cítili pod tlakom? Čo by ste urobili inak?</p>
+    <button onclick="post('/reset')">↻ Nová hra</button>`;
+}
+
+setInterval(() => {
+  if (!st) return;
+  const left = st.on && !st.end ? Math.max(0, st.left - (Date.now() - at)) : st.left;
+  const s = Math.round(left / 1000);
+  $('time').textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}, 500);
+</script>
+</body>
+</html>
