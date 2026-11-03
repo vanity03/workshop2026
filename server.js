@@ -4,13 +4,13 @@ let G, C = [], tm;
 
 function reset() {
   clearTimeout(tm);
-  G = { on: 0, ph: 1, price: S.price, offer: 0, hrs: S.hrs, f: {}, log: [], n: 0, used: {}, end: null, deal: 0, t0: 0, turn: 'blue', last: { c: 'demand' } };
+  G = { on: 0, ph: 1, price: S.price, offer: 0, hrs: S.hrs, f: {}, log: [], n: 0, used: {}, ut: {}, end: null, deal: 0, t0: 0, turn: 'blue', last: { c: 'demand' } };
 }
 reset();
 
 const good = o => (o.e === 'ok' ? G.price <= S.bmax : o.e === 'racc' ? G.offer >= S.min : o.e === 'pay' ? 0 : o.g);
 const hash = o => (o.id * 9301 + G.n * 49297 + 7) % 233280;
-const free = o => !G.used[o.id];
+const free = o => !G.used[o.id] && !G.ut[o.txt];
 const cond = o => (!o.need || G.f[o.need]) && (!o.not || !G.f[o.not]) && (!o.ifx || o.ifx(G)) && (o.o === undefined || (o.o > G.offer && o.o < G.price)) && (o.np === undefined || (o.np < G.price && G.price > (o.pa || 0)));
 
 function hand(r) {
@@ -24,6 +24,12 @@ function hand(r) {
   const add = l => uniq(l).forEach(o => { if (h.length < 3 && !h.some(x => x.txt === o.txt)) h.push(o); });
   if (h.length < 3) add(base.filter(o => o.to.includes('*')).sort((a, b) => hash(a) - hash(b)));
   if (h.length < 1) add(O.filter(o => ok(o) && (o.to.includes(G.last.c) || o.to.includes('*'))).sort((a, b) => hash(a) - hash(b)));
+  // povinné kroky (doručiť dekryptor, overiť, potvrdiť zmazanie, zaplatiť) sa ponúknu vždy, keď sú na rade
+  const pri = uniq(base.filter(o => o.pri && good(o)).sort((a, b) => hash(a) - hash(b))).slice(0, 2);
+  if (pri.length) {
+    const rest = h.filter(x => !pri.some(p => p.txt === x.txt)).sort((a, b) => good(a) - good(b));
+    h = pri.concat(rest).slice(0, 3);
+  }
   return h.sort((a, b) => hash(b) - hash(a));
 }
 const finish = why => { G.end = why; clearTimeout(tm); };
@@ -33,7 +39,7 @@ function pick(r, id) {
   const o = hand(r).find(x => x.id === id);
   if (!o) return;
   const g = good(o) ? 1 : 0;
-  G.used[id] = 1; G.n++;
+  G.used[id] = 1; G.ut[o.txt] = 1; G.n++;
   G.log.push({ r, txt: o.txt, t: o.t, g, w: o.w || '', att: o.att ? S.A[o.att] : null });
   if (o.k) G.f[r[0] + o.k] = 1;
   if (o.o) G.offer = o.o;
